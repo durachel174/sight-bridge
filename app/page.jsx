@@ -69,21 +69,22 @@ export default function SightBridgeApp() {
   }, [scenarios]);
 
   const metrics = useMemo(() => {
-    const categoryCounts = history.reduce((counts, scan) => {
+    const meaningfulHistory = history.filter(isMeaningfulScan);
+    const categoryCounts = meaningfulHistory.reduce((counts, scan) => {
       if (scan.category && scan.category !== "none") counts[scan.category] = (counts[scan.category] ?? 0) + 1;
       return counts;
     }, {});
     const topCategory = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "none";
 
     return {
-      total: history.length,
-      alerts: history.filter((scan) => scan.severity !== "low").length,
-      continued: history.filter((scan) => scan.action === "continued").length,
-      restricted: history.filter((scan) => scan.action === "restricted").length,
-      aiOnly: history.filter((scan) => scan.action === "ai-only").length,
-      correct: history.filter((scan) => scan.feedback === "correct").length,
-      unnecessary: history.filter((scan) => scan.feedback === "unnecessary").length,
-      missed: history.filter((scan) => scan.feedback === "missed").length,
+      total: meaningfulHistory.length,
+      alerts: meaningfulHistory.filter((scan) => scan.severity !== "low").length,
+      continued: meaningfulHistory.filter((scan) => scan.action === "continued").length,
+      restricted: meaningfulHistory.filter((scan) => scan.action === "restricted").length,
+      aiOnly: meaningfulHistory.filter((scan) => scan.action === "ai-only").length,
+      correct: meaningfulHistory.filter((scan) => scan.feedback === "correct").length,
+      unnecessary: meaningfulHistory.filter((scan) => scan.feedback === "unnecessary").length,
+      missed: meaningfulHistory.filter((scan) => scan.feedback === "missed").length,
       topCategory
     };
   }, [history]);
@@ -282,7 +283,8 @@ export default function SightBridgeApp() {
 
   function exportHistory(format) {
     if (history.length === 0) return;
-    const rows = history.map(toEvaluationRow);
+    const rows = history.filter(isMeaningfulScan).map(toEvaluationRow);
+    if (rows.length === 0) return;
     const content = format === "csv" ? rowsToCsv(rows) : JSON.stringify(rows, null, 2);
     const mime = format === "csv" ? "text/csv" : "application/json";
     const extension = format === "csv" ? "csv" : "json";
@@ -724,6 +726,14 @@ function toEvaluationRow(item) {
     sensitivity: item.sensitivity ?? "",
     alertCategories: (item.alertCategories ?? []).join("|")
   };
+}
+
+function isMeaningfulScan(item) {
+  return Boolean(
+    item &&
+      item.source !== "unknown" &&
+      (item.label || item.message || item.reasoning || item.evidenceSummary || item.processing)
+  );
 }
 
 function rowsToCsv(rows) {

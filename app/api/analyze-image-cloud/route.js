@@ -39,6 +39,7 @@ Decision policy:
 
 Classify these cases:
 - Payment cards: high financial if the image is a credit/debit card, banking card, card number groups, cardholder name, expiration date, CVV-like field, or payment-brand card surface is visible. This includes a person holding a partially covered payment card if any card digits, name, expiry, or bank/payment-card context is visible. Redact full numbers in evidence.
+- Do not classify driver's licenses, passports, government IDs, school/work IDs, insurance cards, or tax forms as payment cards. These are identity documents even when they are plastic/card-shaped or include grouped ID numbers.
 - Recipes, public instructions, posters, product labels, public PDFs, measurements, temperatures, dates, page numbers, DOI/URL strings, and publication IDs: low/public or none unless they also contain personal, medical, financial, identity, or private screen information.
 - Prescription or medicine labels: high medical if patient name, medication name, dosage, pharmacy label, prescription bottle, or Rx-style private label is visible. If blurry but clearly a prescription/medicine label, use high or uncertain medical rather than low.
 - Computer or phone screens: high/medium screen if messages, email, login, dashboards, account pages, documents, private tabs, code with secrets, or personal content is visible.
@@ -150,7 +151,7 @@ function stripJsonFence(text) {
     .trim();
 }
 
-function normalizeDecision(decision) {
+export function normalizeDecision(decision) {
   const combined = [
     decision.category,
     decision.disclosure_message,
@@ -161,6 +162,22 @@ function normalizeDecision(decision) {
   ]
     .filter(Boolean)
     .join("\n");
+
+  if (hasIdentityDocumentEvidence(combined)) {
+    return {
+      ...decision,
+      severity: decision.severity === "low" ? "high" : decision.severity,
+      category: "identity",
+      disclosure_message:
+        decision.disclosure_message || "Identity information appears visible.",
+      reasoning:
+        decision.reasoning ||
+        "The image appears to show an identity document with private identifying information.",
+      evidence:
+        decision.evidence ||
+        "Identity document visible with personal identifying fields. Sensitive values are hidden."
+    };
+  }
 
   if (hasPaymentCardEvidence(combined)) {
     return {
@@ -178,6 +195,15 @@ function normalizeDecision(decision) {
 }
 
 function sanitizeDecisionForClient(decision) {
+  if (decision.category === "identity" && hasIdentityDocumentEvidence(JSON.stringify(decision))) {
+    return {
+      ...decision,
+      evidence: "Identity document visible with personal identifying fields. Sensitive values are hidden.",
+      detected_text: "Identity document text detected. Sensitive values are hidden.",
+      visual_context: "Identity document with private identifying information."
+    };
+  }
+
   if (decision.category === "financial" && hasPaymentCardEvidence(JSON.stringify(decision))) {
     return {
       ...decision,
@@ -196,6 +222,13 @@ function sanitizeDecisionForClient(decision) {
     evidence,
     detected_text: detectedText
   };
+}
+
+function hasIdentityDocumentEvidence(text) {
+  const normalized = text.toLowerCase();
+  return /\b(?:driver'?s?\s+licen[cs]e|passport|government\s+id|state\s+id|identity\s+card|id\s+card|student\s+id|work\s+id|employee\s+id|tax\s+form|w-?2|insurance\s+card|date\s+of\s+birth|dob)\b/.test(
+    normalized
+  );
 }
 
 function hasPaymentCardEvidence(text) {
