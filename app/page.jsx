@@ -69,11 +69,22 @@ export default function SightBridgeApp() {
   }, [scenarios]);
 
   const metrics = useMemo(() => {
+    const categoryCounts = history.reduce((counts, scan) => {
+      if (scan.category && scan.category !== "none") counts[scan.category] = (counts[scan.category] ?? 0) + 1;
+      return counts;
+    }, {});
+    const topCategory = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "none";
+
     return {
       total: history.length,
       alerts: history.filter((scan) => scan.severity !== "low").length,
+      continued: history.filter((scan) => scan.action === "continued").length,
       restricted: history.filter((scan) => scan.action === "restricted").length,
-      aiOnly: history.filter((scan) => scan.action === "ai-only").length
+      aiOnly: history.filter((scan) => scan.action === "ai-only").length,
+      correct: history.filter((scan) => scan.feedback === "correct").length,
+      unnecessary: history.filter((scan) => scan.feedback === "unnecessary").length,
+      missed: history.filter((scan) => scan.feedback === "missed").length,
+      topCategory
     };
   }, [history]);
 
@@ -379,7 +390,7 @@ export default function SightBridgeApp() {
 
         <Preferences preferences={preferences} setPreferences={setPreferences} />
         <Samples samples={samples} onRun={(scenario) => analyze({ scenario })} />
-        <ResultPanel result={result} evidence={evidence} onAction={applyAction} />
+        <ResultPanel result={result} evidence={evidence} latestScan={history[0]} onAction={applyAction} />
         <HistoryPanel
           history={history}
           metrics={metrics}
@@ -458,7 +469,7 @@ function Samples({ samples, onRun }) {
   );
 }
 
-function ResultPanel({ result, evidence, onAction }) {
+function ResultPanel({ result, evidence, latestScan, onAction }) {
   const showActions = result.permissionChoices?.length > 0;
   return (
     <section className="result-panel" data-severity={result.severity} aria-live="polite" aria-label="Disclosure result">
@@ -474,6 +485,7 @@ function ResultPanel({ result, evidence, onAction }) {
         <span>Why</span>
         <p>{evidence.why}</p>
       </div>
+      <ReviewTimeline result={result} latestScan={latestScan} />
       <details className="evidence-panel">
         <summary>Detected evidence</summary>
         <dl>
@@ -510,6 +522,46 @@ function ResultPanel({ result, evidence, onAction }) {
   );
 }
 
+function ReviewTimeline({ result, latestScan }) {
+  const hasScan = latestScan && result.severity !== "ready";
+  const steps = [
+    {
+      label: "Imported",
+      detail: hasScan ? latestScan.label || sourceLabel(latestScan.source) : "Waiting for an image, camera frame, or sample.",
+      status: hasScan ? "done" : "idle"
+    },
+    {
+      label: "Analyzed",
+      detail: hasScan ? latestScan.processing : "No analysis has run yet.",
+      status: hasScan ? "done" : "idle"
+    },
+    {
+      label: "Disclosure",
+      detail: hasScan ? `${severityLabel(latestScan.severity)} ${labelForCategory(latestScan.category)}` : "No disclosure decision yet.",
+      status: hasScan ? (latestScan.severity === "low" ? "done" : "attention") : "idle"
+    },
+    {
+      label: "User choice",
+      detail: hasScan ? historyActionLabel(latestScan.action) : "No choice recorded.",
+      status: hasScan && latestScan.action !== "pending" ? "done" : "idle"
+    }
+  ];
+
+  return (
+    <div className="review-timeline" aria-label="Review timeline">
+      {steps.map((step) => (
+        <div key={step.label} className="timeline-step" data-status={step.status}>
+          <span aria-hidden="true" />
+          <div>
+            <strong>{step.label}</strong>
+            <p>{step.detail}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function HistoryPanel({ history, metrics, onFeedback, onExport, onClearCurrent, onClearLocal }) {
   return (
     <section className="history-panel" aria-label="Recent scans">
@@ -522,8 +574,24 @@ function HistoryPanel({ history, metrics, onFeedback, onExport, onClearCurrent, 
       <div className="metrics-grid" aria-label="Scan metrics">
         <Metric value={metrics.total} label="Total" />
         <Metric value={metrics.alerts} label="Alerts" />
-        <Metric value={metrics.restricted} label="Restricted" />
+        <Metric value={metrics.continued} label="Approved" />
         <Metric value={metrics.aiOnly} label="AI-only" />
+      </div>
+      <div className="session-summary">
+        <div>
+          <span>Most common category</span>
+          <strong>{labelForCategory(metrics.topCategory)}</strong>
+        </div>
+        <div>
+          <span>Feedback</span>
+          <strong>
+            {metrics.correct} correct / {metrics.unnecessary} unnecessary / {metrics.missed} missed
+          </strong>
+        </div>
+        <div>
+          <span>Restricted shares</span>
+          <strong>{metrics.restricted}</strong>
+        </div>
       </div>
       <div className="evaluation-toolbar">
         <p>Export scan results for prompt tuning. Images are not saved.</p>
@@ -712,6 +780,25 @@ function historyActionLabel(action) {
   return labels[action] ?? action;
 }
 
+function sourceLabel(source) {
+  return {
+    image_upload: "Image upload",
+    sample_scan: "Sample scan",
+    manual_text: "Manual text",
+    empty_scan: "Empty scan"
+  }[source] ?? "Scan input";
+}
+
+function severityLabel(severity) {
+  return {
+    high: "High-risk",
+    medium: "Medium-risk",
+    uncertain: "Uncertain",
+    low: "Low-risk",
+    ready: "Ready"
+  }[severity] ?? severity;
+}
+
 function feedbackLabel(feedback) {
   return {
     correct: "Correct",
@@ -722,6 +809,7 @@ function feedbackLabel(feedback) {
 
 function labelForCategory(category) {
   return {
+    none: "None",
     financial: "Financial",
     medical: "Medical",
     identity: "Identity",
