@@ -3,6 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { analyzeDisclosure } from "../src/engine/sensitivityEngine.js";
 import { analyzeImageFile } from "../src/engine/imageAnalyzer.js";
+import {
+  applyPrivacyMode,
+  buildTransparency,
+  localAssistPrecheck,
+  shouldRequestClaude,
+  shouldSpeakDisclosure,
+  voiceDisclosureFor
+} from "../src/engine/assistMode.js";
 import scenariosData from "../fixtures/scenarios.json";
 
 const DEFAULT_PREFERENCES = {
@@ -34,12 +42,24 @@ export default function SightBridgeApp() {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const fileRef = useRef(null);
+  const assistBusyRef = useRef(false);
+  const lastSpokenRef = useRef("");
+  const lastClaudePromptAtRef = useRef(0);
   const [config, setConfig] = useState({ cloudVisionAvailable: false, localOcrAvailable: true });
   const [cameraStream, setCameraStream] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewLabel, setPreviewLabel] = useState("No image selected");
+  const [activeTab, setActiveTab] = useState("review");
   const [mode, setMode] = useState("local");
+  const [assistRunning, setAssistRunning] = useState(false);
+  const [privacyMode, setPrivacyMode] = useStoredState("sightbridge.privacyMode", "balanced");
+  const [speakDisclosures, setSpeakDisclosures] = useStoredState("sightbridge.speakDisclosures", false);
+  const [assistDisclosure, setAssistDisclosure] = useState("Assist Mode is ready.");
+  const [assistFrameCount, setAssistFrameCount] = useState(0);
+  const [transparency, setTransparency] = useState(
+    buildTransparency({ localPrecheck: { status: "waiting", evidence: "No assist frame has been scanned yet." } })
+  );
   const [preferences, setPreferences] = useStoredState("sightbridge.preferences", DEFAULT_PREFERENCES);
   const [history, setHistory] = useStoredState("sightbridge.scanHistory", []);
   const [scenarios] = useState(scenariosData);
@@ -64,6 +84,13 @@ export default function SightBridgeApp() {
       .catch(() => setConfig({ cloudVisionAvailable: false, localOcrAvailable: false }));
 
   }, []);
+
+  useEffect(() => {
+    if (!assistRunning || !cameraStream) return;
+    analyzeAssistFrame();
+    const interval = window.setInterval(() => analyzeAssistFrame(), 3000);
+    return () => window.clearInterval(interval);
+  }, [assistRunning, cameraStream, privacyMode, speakDisclosures, developerText, config.cloudVisionAvailable]);
 
   const samples = useMemo(() => {
     const ids = new Set([12, 6, 5, 7]);
@@ -124,14 +151,8 @@ export default function SightBridgeApp() {
   }
 
   async function captureFrame() {
-    if (!cameraStream || !videoRef.current || !canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
-    canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
-    const file = new File([blob], `sightbridge-capture-${Date.now()}.jpg`, { type: "image/jpeg" });
+    const file = await captureFrameFile();
+    if (!file) return;
     setSelectedImage(file);
     setPreviewUrl(URL.createObjectURL(file));
     setPreviewLabel("Captured frame");
@@ -140,6 +161,93 @@ export default function SightBridgeApp() {
       disclosureMessage: "Frame captured.",
       reasoning: "Analyze this frame before sharing."
     });
+  }
+
+  async function captureFrameFile() {
+    if (!cameraStream || !videoRef.current || !canvasRef.current) return null;
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+    return new File([blob], `sightbridge-capture-${Date.now()}.jpg`, { type: "image/jpeg" });
+  }
+
+  async function analyzeAssistFrame() {
+    if (assistBusyRef.current || !canvasRef.current) return;
+    assistBusyRef.current = true;
+    try {
+      const file = await captureFrameFile();
+      const frameSignal = inspectCanvasSignal(canvasRef.current);
+      const localPrecheck = applyPrivacyMode(
+        localAssistPrecheck({ text: developerText, hasFrame: Boolean(file), frameSignal }),
+        privacyMode
+      );
+
+      let claudeRequested = false;
+      let claudeCalled = false;
+      let displayedResult = assistPrecheckToResult(localPrecheck);
+      let evidenceSummary = localPrecheck.evidence;
+      let processing = "Assist local pre-check only.";
+
+      if (file && config.cloudVisionAvailable && shouldRequestClaude(localPrecheck, privacyMode)) {
+        claudeRequested = true;
+        const now = Date.now();
+        const canPrompt = now - lastClaudePromptAtRef.current > 10000;
+        if (canPrompt) lastClaudePromptAtRef.current = now;
+        if (canPrompt && window.confirm("Local scan is unclear. Ask Claude to inspect this frame?")) {
+          const imageResult = await analyzeImageFile(file, { mode: "cloud" });
+          claudeCalled = imageResult.available !== false;
+          if (imageResult.cloudDecision) {
+            displayedResult = cloudDecisionToResult(imageResult.cloudDecision, displayedResult);
+            evidenceSummary = imageResult.text || imageResult.cloudDecision.evidence || evidenceSummary;
+            processing = imageResult.message ?? "Processed with Claude cloud vision after user confirmation.";
+          } else if (imageResult.message) {
+            processing = imageResult.message;
+          }
+        }
+      }
+
+      const disclosure = displayedResult.reasoning || voiceDisclosureFor(displayedResult);
+      setAssistFrameCount((count) => count + 1);
+      setAssistDisclosure(displayedResult.disclosureMessage || disclosure);
+      setResult(displayedResult);
+      setEvidence({
+        processing,
+        text: evidenceSummary,
+        why: explainDecision(displayedResult, evidenceSummary, { available: true })
+      });
+      setTransparency(
+        buildTransparency({
+          localPrecheck,
+          claudeRequested,
+          claudeCalled,
+          category: displayedResult.category,
+          evidenceSummary
+        })
+      );
+
+      addHistory(displayedResult, {
+        source: "assist_frame",
+        previewLabel: "Assist frame",
+        processing,
+        evidenceSummary,
+        assistMode: true,
+        privacyMode,
+        localPrecheck: localPrecheck.status,
+        claudeRequested,
+        claudeCalled,
+        spokenDisclosure: speakDisclosures,
+        sentToCloudSummary: claudeCalled
+          ? "One confirmed camera frame was sent to Claude. The frame itself was not stored."
+          : "No camera frame was sent to Claude."
+      });
+
+      maybeSpeak(displayedResult.disclosureMessage || disclosure, speakDisclosures, lastSpokenRef);
+    } finally {
+      assistBusyRef.current = false;
+    }
   }
 
   function chooseImage(event) {
@@ -236,6 +344,13 @@ export default function SightBridgeApp() {
       evidenceSummary: details.evidenceSummary ?? "",
       sensitivity: preferences.sensitivity,
       alertCategories: preferences.alertCategories,
+      assistMode: Boolean(details.assistMode),
+      privacyMode: details.privacyMode ?? "",
+      localPrecheck: details.localPrecheck ?? "",
+      claudeRequested: Boolean(details.claudeRequested),
+      claudeCalled: Boolean(details.claudeCalled),
+      spokenDisclosure: Boolean(details.spokenDisclosure),
+      sentToCloudSummary: details.sentToCloudSummary ?? "",
       time: new Date().toISOString()
     };
     setHistory((items) => [scan, ...items].slice(0, 20));
@@ -319,6 +434,15 @@ export default function SightBridgeApp() {
           </div>
         </header>
 
+        <nav className="mode-tabs" aria-label="SightBridge mode">
+          <button type="button" className={activeTab === "review" ? "active" : ""} onClick={() => setActiveTab("review")}>
+            Review
+          </button>
+          <button type="button" className={activeTab === "assist" ? "active" : ""} onClick={() => setActiveTab("assist")}>
+            Assist
+          </button>
+        </nav>
+
         <section className="camera-panel" aria-label="Camera capture">
           <div className="section-head">
             <div>
@@ -345,26 +469,41 @@ export default function SightBridgeApp() {
           </div>
         </section>
 
-        <section className="capture-panel" aria-label="Scene input">
-          <div className="section-head compact-head">
-            <div>
-              <p className="kicker">Image check</p>
-              <h2>Upload</h2>
+        {activeTab === "review" ? (
+          <section className="capture-panel" aria-label="Scene input">
+            <div className="section-head compact-head">
+              <div>
+                <p className="kicker">Image check</p>
+                <h2>Upload</h2>
+              </div>
             </div>
-          </div>
-          <div className="preview">
-            {previewUrl ? <img src={previewUrl} alt="Selected scene preview" /> : <span>{previewLabel}</span>}
-          </div>
-          <div className="controls">
-            <label className="button secondary">
-              <input ref={fileRef} type="file" accept="image/*" onChange={chooseImage} />
-              Choose image
-            </label>
-            <button className="button secondary" type="button" disabled={!selectedImage || isAnalyzing} onClick={() => analyze()}>
-              {isAnalyzing ? "Analyzing..." : "Analyze image"}
-            </button>
-          </div>
-        </section>
+            <div className="preview">
+              {previewUrl ? <img src={previewUrl} alt="Selected scene preview" /> : <span>{previewLabel}</span>}
+            </div>
+            <div className="controls">
+              <label className="button secondary">
+                <input ref={fileRef} type="file" accept="image/*" onChange={chooseImage} />
+                Choose image
+              </label>
+              <button className="button secondary" type="button" disabled={!selectedImage || isAnalyzing} onClick={() => analyze()}>
+                {isAnalyzing ? "Analyzing..." : "Analyze image"}
+              </button>
+            </div>
+          </section>
+        ) : (
+          <AssistPanel
+            running={assistRunning}
+            canRun={Boolean(cameraStream)}
+            privacyMode={privacyMode}
+            setPrivacyMode={setPrivacyMode}
+            speakDisclosures={speakDisclosures}
+            setSpeakDisclosures={setSpeakDisclosures}
+            disclosure={assistDisclosure}
+            frameCount={assistFrameCount}
+            transparency={transparency}
+            onToggle={() => setAssistRunning((running) => !running)}
+          />
+        )}
 
         <section className="settings-panel" aria-label="Alert settings">
           <div className="section-head compact-head">
@@ -403,8 +542,12 @@ export default function SightBridgeApp() {
           </button>
         </section>
 
-        <Preferences preferences={preferences} setPreferences={setPreferences} />
-        <Samples samples={samples} onRun={(scenario) => analyze({ scenario })} />
+        {activeTab === "review" ? (
+          <>
+            <Preferences preferences={preferences} setPreferences={setPreferences} />
+            <Samples samples={samples} onRun={(scenario) => analyze({ scenario })} />
+          </>
+        ) : null}
         <ResultPanel
           result={result}
           evidence={evidence}
@@ -486,6 +629,101 @@ function Samples({ samples, onRun }) {
           </button>
         ))}
       </div>
+    </section>
+  );
+}
+
+function AssistPanel({
+  running,
+  canRun,
+  privacyMode,
+  setPrivacyMode,
+  speakDisclosures,
+  setSpeakDisclosures,
+  disclosure,
+  frameCount,
+  transparency,
+  onToggle
+}) {
+  return (
+    <section className="assist-panel" aria-label="Real-time assist mode">
+      <div className="section-head compact-head">
+        <div>
+          <p className="kicker">Assist Mode</p>
+          <h2>Real-time privacy assist</h2>
+        </div>
+        <span className={`privacy-chip ${running ? "live-chip" : ""}`}>{running ? "Scanning every 3s" : "Paused"}</span>
+      </div>
+      <div className="assist-disclosure">
+        <span>Voice-style disclosure</span>
+        <strong>{disclosure}</strong>
+      </div>
+      <div className="assist-controls">
+        <button className="button primary" type="button" disabled={!canRun} onClick={onToggle}>
+          {running ? "Pause assist" : "Start assist"}
+        </button>
+        <label className="field compact">
+          <span>Privacy mode</span>
+          <select value={privacyMode} onChange={(event) => setPrivacyMode(event.target.value)}>
+            <option value="strict">Strict</option>
+            <option value="balanced">Balanced</option>
+            <option value="relaxed">Relaxed</option>
+          </select>
+        </label>
+        <label className="assist-toggle">
+          <input
+            type="checkbox"
+            checked={speakDisclosures}
+            onChange={(event) => setSpeakDisclosures(event.target.checked)}
+          />{" "}
+          Speak disclosures
+        </label>
+      </div>
+      <TransparencyPanel transparency={transparency} frameCount={frameCount} />
+    </section>
+  );
+}
+
+function TransparencyPanel({ transparency, frameCount }) {
+  return (
+    <section className="transparency-panel" aria-label="What got sent">
+      <div className="section-head compact-head">
+        <div>
+          <p className="kicker">Transparency</p>
+          <h2>What got sent?</h2>
+        </div>
+        <span className="privacy-chip">{frameCount} frames</span>
+      </div>
+      <dl>
+        <div>
+          <dt>Local scan</dt>
+          <dd>{transparency.localScanResult}</dd>
+        </div>
+        <div>
+          <dt>Claude requested</dt>
+          <dd>{transparency.claudeRequested ? "Yes" : "No"}</dd>
+        </div>
+        <div>
+          <dt>Claude called</dt>
+          <dd>{transparency.claudeCalled ? "Yes" : "No"}</dd>
+        </div>
+        <div>
+          <dt>Category</dt>
+          <dd>{labelForCategory(transparency.category)}</dd>
+        </div>
+        <div className="wide-row">
+          <dt>Redacted evidence</dt>
+          <dd>{transparency.redactedEvidence}</dd>
+        </div>
+        <div className="wide-row">
+          <dt>Not stored</dt>
+          <dd>{transparency.notStored}</dd>
+        </div>
+        <div>
+          <dt>Frame storage</dt>
+          <dd>{transparency.frameStorage}</dd>
+        </div>
+      </dl>
     </section>
   );
 }
@@ -668,6 +906,7 @@ function HistoryPanel({ history, metrics, onFeedback, onExport, onClearCurrent, 
           <strong>{metrics.restricted}</strong>
         </div>
       </div>
+      <EvaluationSummary history={history} metrics={metrics} />
       <div className="evaluation-toolbar">
         <p>Export scan results for prompt tuning. Images are not saved.</p>
         <div>
@@ -720,6 +959,50 @@ function HistoryPanel({ history, metrics, onFeedback, onExport, onClearCurrent, 
   );
 }
 
+function EvaluationSummary({ history, metrics }) {
+  const meaningful = history.filter(isMeaningfulScan);
+  const reviewed = meaningful.filter((item) => item.feedback);
+  const accuracy = reviewed.length === 0 ? 0 : Math.round((metrics.correct / reviewed.length) * 100);
+  const groups = EVALUATION_CATEGORIES.map((category) => ({
+    category,
+    total: meaningful.filter((item) => item.category === category).length
+  })).filter((group) => group.total > 0);
+  const needsTuning = meaningful.filter((item) => ["unnecessary", "missed", "wrong_category"].includes(item.feedback)).slice(0, 4);
+
+  return (
+    <section className="evaluation-summary" aria-label="Evaluation summary">
+      <div className="summary-stat">
+        <span>Accuracy</span>
+        <strong>{reviewed.length ? `${accuracy}%` : "No feedback yet"}</strong>
+      </div>
+      <div className="summary-stat">
+        <span>False alarms</span>
+        <strong>{metrics.unnecessary}</strong>
+      </div>
+      <div className="summary-stat">
+        <span>Missed alerts</span>
+        <strong>{metrics.missed}</strong>
+      </div>
+      <div className="summary-stat">
+        <span>Wrong category</span>
+        <strong>{metrics.wrongCategory}</strong>
+      </div>
+      <div className="summary-wide">
+        <span>Results by category</span>
+        <p>{groups.length ? groups.map((group) => `${labelForCategory(group.category)} ${group.total}`).join(" / ") : "No evaluated scans yet."}</p>
+      </div>
+      <div className="summary-wide">
+        <span>Needs tuning</span>
+        <p>
+          {needsTuning.length
+            ? needsTuning.map((item) => `${item.label || item.category}: ${feedbackLabel(item.feedback)}`).join(" / ")
+            : "No tuning issues marked yet."}
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function Metric({ value, label }) {
   return (
     <div>
@@ -757,7 +1040,14 @@ function toEvaluationRow(item) {
     processing: item.processing ?? "",
     evidenceSummary: item.evidenceSummary ?? "",
     sensitivity: item.sensitivity ?? "",
-    alertCategories: (item.alertCategories ?? []).join("|")
+    alertCategories: (item.alertCategories ?? []).join("|"),
+    assistMode: Boolean(item.assistMode),
+    privacyMode: item.privacyMode ?? "",
+    localPrecheck: item.localPrecheck ?? "",
+    claudeRequested: Boolean(item.claudeRequested),
+    claudeCalled: Boolean(item.claudeCalled),
+    spokenDisclosure: Boolean(item.spokenDisclosure),
+    sentToCloudSummary: item.sentToCloudSummary ?? ""
   };
 }
 
@@ -840,6 +1130,50 @@ function cloudDecisionToResult(decision, fallback) {
     reasoning: decision.reasoning ?? fallback.reasoning,
     permissionChoices: severity === "low" ? [] : ["Continue sharing", "Restrict sharing", "AI-only mode"]
   };
+}
+
+function assistPrecheckToResult(precheck) {
+  const severity = precheck.severity ?? "uncertain";
+  return {
+    severity,
+    category: precheck.category ?? "none",
+    action: severity === "high" || precheck.status === "risky" ? "interrupt_confirm" : severity === "low" ? "none" : "ask_if_proceed",
+    disclosureMessage: precheck.disclosure,
+    reasoning: precheck.evidence,
+    permissionChoices: severity === "low" ? [] : ["Continue sharing", "Restrict sharing", "AI-only mode"]
+  };
+}
+
+function inspectCanvasSignal(canvas) {
+  const context = canvas.getContext("2d");
+  if (!context || !canvas.width || !canvas.height) return "unknown";
+  const sampleWidth = Math.min(canvas.width, 96);
+  const sampleHeight = Math.min(canvas.height, 54);
+  const data = context.getImageData(0, 0, sampleWidth, sampleHeight).data;
+  let min = 255;
+  let max = 0;
+  for (let index = 0; index < data.length; index += 4) {
+    const luminance = Math.round(data[index] * 0.2126 + data[index + 1] * 0.7152 + data[index + 2] * 0.0722);
+    min = Math.min(min, luminance);
+    max = Math.max(max, luminance);
+  }
+  return max - min < 18 ? "blank" : "unknown";
+}
+
+function maybeSpeak(disclosure, speakEnabled, lastSpokenRef) {
+  if (
+    shouldSpeakDisclosure({
+      speakEnabled,
+      lastSpoken: lastSpokenRef.current,
+      nextDisclosure: disclosure
+    }) &&
+    typeof window !== "undefined" &&
+    "speechSynthesis" in window
+  ) {
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(new SpeechSynthesisUtterance(disclosure));
+    lastSpokenRef.current = disclosure;
+  }
 }
 
 function cameraErrorMessage(error) {
