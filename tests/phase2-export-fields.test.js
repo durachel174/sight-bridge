@@ -8,6 +8,7 @@ test("evaluation export includes phase 2 transparency fields", () => {
     "assistMode",
     "privacyMode",
     "localPrecheck",
+    "resultSource",
     "claudeRequested",
     "claudeCalled",
     "spokenDisclosure",

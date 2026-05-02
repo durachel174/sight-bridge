@@ -205,6 +205,7 @@ export default function SightBridgeApp() {
       let displayedResult = assistPrecheckToResult(localPrecheck);
       let evidenceSummary = localPrecheck.evidence;
       let processing = "Assist local pre-check only.";
+      let resultSource = "local";
 
       if (file && config.cloudVisionAvailable && shouldRequestClaude(localPrecheck, privacyMode)) {
         claudeRequested = true;
@@ -218,6 +219,7 @@ export default function SightBridgeApp() {
             displayedResult = cloudDecisionToResult(imageResult.cloudDecision, displayedResult);
             evidenceSummary = imageResult.text || imageResult.cloudDecision.evidence || evidenceSummary;
             processing = imageResult.message ?? "Processed with Claude cloud vision after user confirmation.";
+            resultSource = "claude";
           } else if (imageResult.message) {
             processing = imageResult.message;
           }
@@ -254,6 +256,7 @@ export default function SightBridgeApp() {
         claudeRequested,
         claudeCalled,
         spokenDisclosure: speakDisclosures,
+        resultSource,
         sentToCloudSummary: claudeCalled
           ? "One confirmed camera frame was sent to Claude. The frame itself was not stored."
           : "No camera frame was sent to Claude."
@@ -313,6 +316,7 @@ export default function SightBridgeApp() {
             source: selectedImage ? "image_upload" : "manual_text",
             previewLabel,
             processing: imageResult.message ?? "Image analysis unavailable",
+            resultSource: "none",
             evidenceSummary: "No model analysis was returned."
           });
           return;
@@ -336,6 +340,7 @@ export default function SightBridgeApp() {
         source: scenario ? "sample_scan" : selectedImage ? "image_upload" : developerText ? "manual_text" : "empty_scan",
         previewLabel: scenario?.scene ?? previewLabel,
         processing: imageResult.message ?? "Local text rules",
+        resultSource: imageResult.cloudDecision ? "claude" : "local",
         evidenceSummary: text || "No readable text or model evidence returned."
       });
     } finally {
@@ -356,6 +361,7 @@ export default function SightBridgeApp() {
       source: details.source ?? "unknown",
       label: details.previewLabel ?? previewLabel,
       processing: details.processing ?? "Unknown",
+      resultSource: details.resultSource ?? resultSourceFromProcessing(details.processing),
       evidenceSummary: details.evidenceSummary ?? "",
       sensitivity: preferences.sensitivity,
       alertCategories: preferences.alertCategories,
@@ -784,6 +790,10 @@ function ResultPanel({ result, evidence, latestScan, onAction, onFeedback }) {
         <summary>Detected evidence</summary>
         <dl>
           <div>
+            <dt>Result source</dt>
+            <dd>{latestScan ? resultSourceLabel(latestScan.resultSource) : "Not analyzed yet"}</dd>
+          </div>
+          <div>
             <dt>Category</dt>
             <dd>{result.category}</dd>
           </div>
@@ -961,7 +971,7 @@ function HistoryPanel({ history, metrics, onFeedback, onExport, onClearCurrent, 
               <div className="history-main">
                 <p className="history-title">{item.message}</p>
                 <span className="history-meta">
-                  {item.severity} / {item.category} / {historyActionLabel(item.action)}
+                  {item.severity} / {item.category} / {resultSourceLabel(item.resultSource)} / {historyActionLabel(item.action)}
                 </span>
                 {item.feedback ? (
                   <span className="feedback-chip">
@@ -1071,6 +1081,7 @@ function toEvaluationRow(item) {
     feedback: item.feedback ?? "",
     expectedCategory: item.expectedCategory ?? "",
     processing: item.processing ?? "",
+    resultSource: item.resultSource ?? resultSourceFromProcessing(item.processing),
     evidenceSummary: item.evidenceSummary ?? "",
     sensitivity: item.sensitivity ?? "",
     alertCategories: (item.alertCategories ?? []).join("|"),
@@ -1090,6 +1101,22 @@ function isMeaningfulScan(item) {
       item.source !== "unknown" &&
       (item.label || item.message || item.reasoning || item.evidenceSummary || item.processing)
   );
+}
+
+function resultSourceFromProcessing(processing = "") {
+  const normalized = processing.toLowerCase();
+  if (normalized.includes("claude") || normalized.includes("cloud vision")) return "claude";
+  if (normalized.includes("unavailable") || normalized.includes("did not run")) return "none";
+  return "local";
+}
+
+function resultSourceLabel(source) {
+  return {
+    local: "Local pre-check",
+    claude: "Claude Vision",
+    none: "No analysis",
+    unknown: "Unknown"
+  }[source || "unknown"] ?? source;
 }
 
 function rowsToCsv(rows) {
