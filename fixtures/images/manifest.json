@@ -1,0 +1,58 @@
+[
+  {
+    "id": "credit-card-visa-platinum",
+    "label": "Visa Platinum credit card",
+    "path": "fixtures/images/financial/credit-card-visa-platinum.webp",
+    "expectedSeverity": "high",
+    "expectedCategory": "financial"
+  },
+  {
+    "id": "blurry-prescription-label",
+    "label": "Blurry CVS prescription label",
+    "path": "fixtures/images/medical/blurry-prescription-label.jpg",
+    "expectedSeverity": "high",
+    "expectedCategory": "medical"
+  },
+  {
+    "id": "banana-bread-recipe",
+    "label": "Banana bread recipe page",
+    "path": "fixtures/images/public-safe/banana-bread-recipe.png",
+    "expectedSeverity": "low",
+    "expectedCategory": "none"
+  },
+  {
+    "id": "dc-sample-drivers-license",
+    "label": "Washington DC sample driver's license",
+    "path": "fixtures/images/identity/dc-sample-drivers-license.png",
+    "expectedSeverity": "high",
+    "expectedCategory": "identity"
+  },
+  {
+    "id": "sample-envelope",
+    "label": "Public-domain sample envelope",
+    "path": "fixtures/images/address/sample-envelope.jpg",
+    "expectedSeverity": "medium",
+    "expectedCategory": "address"
+  },
+  {
+    "id": "blue-bottle-menu",
+    "label": "Public coffee menu sign",
+    "path": "fixtures/images/public-safe/blue-bottle-menu.jpg",
+    "expectedSeverity": "low",
+    "expectedCategory": "none"
+  },
+  {
+    "id": "synthetic-bank-statement",
+    "label": "Synthetic bank statement",
+    "path": "fixtures/images/financial/synthetic-bank-statement.png",
+    "expectedSeverity": "high",
+    "expectedCategory": "financial"
+  },
+  {
+    "id": "synthetic-email-inbox",
+    "label": "Synthetic private email inbox",
+    "path": "fixtures/images/screens/synthetic-email-inbox.png",
+    "expectedSeverity": "high",
+    "expectedCategory": "screen"
+  }
+]

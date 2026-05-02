@@ -1,0 +1,28 @@
+{
+  "name": "sightbridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SightBridge disclosure-awareness prototype for wearable and phone-camera AI assistance.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "local:ocr": "python3 scripts/server.py",
+    "test": "node --test tests/*.test.js",
+    "eval:fixtures": "node scripts/evaluate-fixtures.js",
+    "deploy:check": "node --test tests/*.test.js && next build"
+  },
+  "dependencies": {
+    "next": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "keywords": [
+    "accessibility",
+    "privacy",
+    "wearable-ai",
+    "disclosure-awareness"
+  ],
+  "license": "UNLICENSED"
+}

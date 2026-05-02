@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SightBridge Prototype</title>
+    <link rel="stylesheet" href="../src/styles/app.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="workspace" aria-labelledby="app-title">
+        <header class="masthead">
+          <div>
+            <p class="eyebrow">Phone-camera MVP</p>
+            <h1 id="app-title">SightBridge</h1>
+          </div>
+          <div class="status-pill" id="processing-mode">Local rules + contextual stub</div>
+        </header>
+
+        <section class="camera-panel" aria-label="Camera capture">
+          <div class="section-head">
+            <div>
+              <p class="kicker">Live View</p>
+              <h2>Camera</h2>
+            </div>
+            <span class="privacy-chip">Local first</span>
+          </div>
+          <div class="camera-frame">
+            <video id="camera-preview" class="camera-preview" autoplay playsinline muted></video>
+            <div class="viewfinder-mark top-left"></div>
+            <div class="viewfinder-mark top-right"></div>
+            <div class="viewfinder-mark bottom-left"></div>
+            <div class="viewfinder-mark bottom-right"></div>
+          </div>
+          <canvas id="capture-canvas" hidden></canvas>
+          <div class="controls">
+            <button id="start-camera-button" class="button primary" type="button">Start camera</button>
+            <button id="capture-button" class="button secondary" type="button" disabled>Capture frame</button>
+          </div>
+        </section>
+
+        <section class="capture-panel" aria-label="Scene input">
+          <div class="section-head compact-head">
+            <div>
+              <p class="kicker">Fallback</p>
+              <h2>Import</h2>
+            </div>
+          </div>
+          <div class="preview" id="preview">
+            <span>No image selected</span>
+          </div>
+          <div class="controls">
+            <label class="button secondary">
+              <input id="image-input" type="file" accept="image/*" />
+              Choose image
+            </label>
+            <button id="analyze-image-button" class="button secondary" type="button" disabled>
+              Analyze image
+            </button>
+          </div>
+        </section>
+
+        <section class="samples-panel" aria-label="Sample scans">
+          <div class="section-head compact-head">
+            <div>
+              <p class="kicker">Demo</p>
+              <h2>Try sample scans</h2>
+            </div>
+          </div>
+          <div id="sample-list" class="sample-list"></div>
+        </section>
+
+        <section class="settings-panel" aria-label="Alert settings">
+          <div class="section-head compact-head">
+            <div>
+              <p class="kicker">Privacy</p>
+              <h2>Analysis</h2>
+            </div>
+          </div>
+          <fieldset>
+            <legend>Analysis mode</legend>
+            <label><input id="local-mode" type="radio" name="analysis-mode" value="local" checked /> Local OCR first</label>
+            <label><input id="cloud-mode" type="radio" name="analysis-mode" value="cloud" disabled /> Cloud vision assist</label>
+          </fieldset>
+          <button id="analyze-button" class="button primary">Analyze disclosure</button>
+        </section>
+
+        <section class="preferences-panel" aria-label="Disclosure preferences">
+          <div class="section-head compact-head">
+            <div>
+              <p class="kicker">Preferences</p>
+              <h2>What should interrupt?</h2>
+            </div>
+          </div>
+          <label class="field compact">
+            <span>Sensitivity</span>
+            <select id="preference-sensitivity">
+              <option value="medium" selected>Balanced</option>
+              <option value="low">Quiet</option>
+              <option value="high">Careful</option>
+            </select>
+          </label>
+          <fieldset class="preference-grid">
+            <legend>Alert me about</legend>
+            <label><input type="checkbox" name="preference-category" value="financial" checked /> Financial</label>
+            <label><input type="checkbox" name="preference-category" value="medical" checked /> Medical</label>
+            <label><input type="checkbox" name="preference-category" value="identity" checked /> Identity</label>
+            <label><input type="checkbox" name="preference-category" value="address" checked /> Address</label>
+            <label><input type="checkbox" name="preference-category" value="screen" checked /> Screens</label>
+            <label><input type="checkbox" name="preference-category" value="personal" checked /> Personal docs</label>
+          </fieldset>
+        </section>
+
+        <section class="result-panel" aria-live="polite" aria-label="Disclosure result">
+          <div class="result-topline">
+            <p class="kicker">Disclosure</p>
+            <div class="severity" id="severity">Ready</div>
+          </div>
+          <h2 id="disclosure-message">Ready to analyze</h2>
+          <p id="reasoning">SightBridge will explain what may be visible before external sharing.</p>
+          <div class="explanation-strip" id="explanation-strip" hidden>
+            <span>Why</span>
+            <p id="plain-explanation">No analysis yet.</p>
+          </div>
+          <details class="evidence-panel">
+            <summary>Detected evidence</summary>
+            <dl>
+              <div>
+                <dt>Category</dt>
+                <dd id="evidence-category">None</dd>
+              </div>
+              <div>
+                <dt>Processing</dt>
+                <dd id="evidence-processing">Local rules ready</dd>
+              </div>
+              <div>
+                <dt>OCR / model text</dt>
+                <dd><pre id="evidence-text">No analysis yet.</pre></dd>
+              </div>
+            </dl>
+          </details>
+          <div class="actions" id="permission-actions" hidden>
+            <button id="continue-action" class="button secondary" type="button">Continue sharing</button>
+            <button id="restrict-action" class="button secondary" type="button">Restrict sharing</button>
+            <button id="ai-only-action" class="button secondary" type="button">AI-only mode</button>
+            <button id="cancel-action" class="button ghost" type="button">Cancel</button>
+          </div>
+        </section>
+
+        <section class="history-panel" aria-label="Recent scans">
+          <div class="section-head compact-head">
+            <div>
+              <p class="kicker">Recent</p>
+              <h2>Scan history</h2>
+            </div>
+          </div>
+          <div class="metrics-grid" aria-label="Scan metrics">
+            <div>
+              <span id="metric-total">0</span>
+              <p>Total</p>
+            </div>
+            <div>
+              <span id="metric-alerts">0</span>
+              <p>Alerts</p>
+            </div>
+            <div>
+              <span id="metric-restricted">0</span>
+              <p>Restricted</p>
+            </div>
+            <div>
+              <span id="metric-ai-only">0</span>
+              <p>AI-only</p>
+            </div>
+          </div>
+          <ol id="scan-history" class="scan-history">
+            <li class="empty-history">No scans yet.</li>
+          </ol>
+          <div class="controls utility-controls">
+            <button id="clear-current-button" class="button ghost" type="button">Clear current scan</button>
+            <button id="clear-local-button" class="button ghost" type="button">Clear local data</button>
+          </div>
+        </section>
+
+        <section class="privacy-note" aria-label="Privacy note">
+          <p class="kicker">Privacy note</p>
+          <p>
+            Local OCR runs through this device/server. Cloud vision is off unless you configure it and approve sending an image.
+            Preferences, history, and feedback stay in this browser.
+          </p>
+        </section>
+
+        <details class="dev-tools">
+          <summary>Developer test tools</summary>
+          <div class="dev-grid">
+            <label class="field compact">
+              <span>Debug sensitivity mirror</span>
+              <select id="sensitivity-level">
+                <option value="medium" selected>Medium</option>
+                <option value="high">High</option>
+                <option value="low">Low</option>
+              </select>
+            </label>
+            <label class="field compact">
+              <span>Scenario fixture</span>
+              <select id="scenario-select" aria-label="Load scenario">
+                <option value="">Load scenario...</option>
+              </select>
+            </label>
+          </div>
+          <fieldset>
+            <legend>Alert categories</legend>
+            <label><input type="checkbox" name="category" value="financial" checked /> Financial</label>
+            <label><input type="checkbox" name="category" value="medical" checked /> Medical</label>
+            <label><input type="checkbox" name="category" value="identity" checked /> Identity</label>
+            <label><input type="checkbox" name="category" value="address" checked /> Address</label>
+            <label><input type="checkbox" name="category" value="screen" checked /> Screens</label>
+            <label><input type="checkbox" name="category" value="personal" checked /> Personal docs</label>
+          </fieldset>
+          <label class="field">
+            <span>OCR or scene text</span>
+            <textarea id="scene-text" rows="5" placeholder="Optional developer input for OCR text, visible document text, or a quick scene description."></textarea>
+          </label>
+        </details>
+      </section>
+    </main>
+
+    <script type="module" src="../src/app/main.js"></script>
+  </body>
+</html>

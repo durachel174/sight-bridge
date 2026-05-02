@@ -1,0 +1,92 @@
+[
+  {
+    "id": 1,
+    "scene": "Laptop showing recipe blog",
+    "expectedSensitivity": "low",
+    "prototypeText": "Laptop screen showing a recipe blog with public cooking instructions."
+  },
+  {
+    "id": 2,
+    "scene": "Laptop with banking tab visible",
+    "expectedSensitivity": "high",
+    "prototypeText": "Laptop screen with banking tab visible. Account balance and routing number may be on screen."
+  },
+  {
+    "id": 3,
+    "scene": "Family photo on desk",
+    "expectedSensitivity": "low",
+    "prototypeText": "Family photo on desk."
+  },
+  {
+    "id": 4,
+    "scene": "Whiteboard with project diagrams",
+    "expectedSensitivity": "uncertain",
+    "prototypeText": "Whiteboard with project diagrams, sticky notes, and possible private planning details."
+  },
+  {
+    "id": 5,
+    "scene": "Envelope with return address",
+    "expectedSensitivity": "medium",
+    "prototypeText": "Envelope with return address visible: 1420 Pine Street, Boston MA."
+  },
+  {
+    "id": 6,
+    "scene": "Prescription bottle label",
+    "expectedSensitivity": "high",
+    "prototypeText": "Prescription bottle from pharmacy. Patient name, Rx number, dosage, refill, and medication visible."
+  },
+  {
+    "id": 7,
+    "scene": "Restaurant menu",
+    "expectedSensitivity": "low",
+    "prototypeText": "Restaurant menu with public food prices."
+  },
+  {
+    "id": 8,
+    "scene": "ID badge on lanyard",
+    "expectedSensitivity": "high",
+    "prototypeText": "ID badge on lanyard with employee name and government ID number."
+  },
+  {
+    "id": 9,
+    "scene": "Handwritten sticky note",
+    "expectedSensitivity": "uncertain",
+    "prototypeText": "Handwritten sticky note with reminder, maybe login details or personal note."
+  },
+  {
+    "id": 10,
+    "scene": "TV showing news broadcast",
+    "expectedSensitivity": "low",
+    "prototypeText": "TV showing news broadcast, public media."
+  },
+  {
+    "id": 11,
+    "scene": "Open mail with partial letter",
+    "expectedSensitivity": "medium",
+    "prototypeText": "Open mail with partial letter and personal correspondence visible."
+  },
+  {
+    "id": 12,
+    "scene": "Credit card on table",
+    "expectedSensitivity": "high",
+    "prototypeText": "Credit card on table. Number 4111 1111 1111 1111 and expiration date visible."
+  },
+  {
+    "id": 13,
+    "scene": "Someone else's phone screen",
+    "expectedSensitivity": "uncertain",
+    "prototypeText": "Someone else's phone screen is visible with private messages."
+  },
+  {
+    "id": 14,
+    "scene": "Bookshelf",
+    "expectedSensitivity": "low",
+    "prototypeText": "Bookshelf in living room."
+  },
+  {
+    "id": 15,
+    "scene": "Tax form / W-2 on desk",
+    "expectedSensitivity": "high",
+    "prototypeText": "Tax form W-2 on desk with SSN 123-45-6789 and wages."
+  }
+]

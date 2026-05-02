@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "SightBridge",
+    "slug": "sightbridge",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "SightBridge uses the camera to analyze what sensitive information may be visible before sharing."
+      }
+    },
+    "android": {
+      "permissions": ["CAMERA"]
+    }
+  }
+}
