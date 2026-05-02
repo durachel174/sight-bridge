@@ -307,6 +307,12 @@ h2 {
   padding: 16px;
 }
 
+.assist-description {
+  margin: -4px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
 .assist-disclosure span,
 .transparency-panel dt {
   color: var(--muted);

@@ -714,6 +714,10 @@ function AssistPanel({
         </div>
         <span className={`privacy-chip ${running ? "live-chip" : ""}`}>{running ? "Scanning every 3s" : "Paused"}</span>
       </div>
+      <p className="assist-description">
+        Assist Mode simulates how SightBridge could work on AI glasses: the camera checks the scene every few seconds,
+        gives a short privacy disclosure, and only uses Claude Vision when you turn on Claude assist for the session.
+      </p>
       <div className="assist-disclosure">
         <span>Voice-style disclosure</span>
         <strong>{disclosure}</strong>
