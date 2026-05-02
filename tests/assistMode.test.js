@@ -16,16 +16,17 @@ test("privacy modes handle unclear frames differently", () => {
   assert.equal(applyPrivacyMode(unclear, "relaxed").status, "safe");
 });
 
-test("Claude is requested only for balanced unclear frames", () => {
+test("Claude is requested only when session assist is enabled for balanced unclear frames", () => {
   const safe = localAssistPrecheck({ text: "Public cafe menu", hasFrame: true });
   const risky = localAssistPrecheck({ text: "Visa card visible", hasFrame: true });
   const unclear = localAssistPrecheck({ hasFrame: true });
 
-  assert.equal(shouldRequestClaude(safe, "balanced"), false);
-  assert.equal(shouldRequestClaude(risky, "balanced"), false);
-  assert.equal(shouldRequestClaude(unclear, "balanced"), true);
-  assert.equal(shouldRequestClaude(unclear, "strict"), false);
-  assert.equal(shouldRequestClaude(unclear, "relaxed"), false);
+  assert.equal(shouldRequestClaude(safe, "balanced", true), false);
+  assert.equal(shouldRequestClaude(risky, "balanced", true), false);
+  assert.equal(shouldRequestClaude(unclear, "balanced", false), false);
+  assert.equal(shouldRequestClaude(unclear, "balanced", true), true);
+  assert.equal(shouldRequestClaude(unclear, "strict", true), false);
+  assert.equal(shouldRequestClaude(unclear, "relaxed", true), false);
 });
 
 test("transparency records Claude and storage state", () => {

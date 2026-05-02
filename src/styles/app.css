@@ -340,6 +340,13 @@ h2 {
   font-weight: 800;
 }
 
+.assist-note {
+  margin: -2px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
 .transparency-panel {
   border-top: 1px solid var(--line);
   padding-top: 14px;

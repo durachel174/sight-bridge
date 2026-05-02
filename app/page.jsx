@@ -44,7 +44,6 @@ export default function SightBridgeApp() {
   const fileRef = useRef(null);
   const assistBusyRef = useRef(false);
   const lastSpokenRef = useRef("");
-  const lastClaudePromptAtRef = useRef(0);
   const [config, setConfig] = useState({ cloudVisionAvailable: false, localOcrAvailable: true });
   const [cameraStream, setCameraStream] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -53,6 +52,7 @@ export default function SightBridgeApp() {
   const [activeTab, setActiveTab] = useState("review");
   const [mode, setMode] = useState("local");
   const [assistRunning, setAssistRunning] = useState(false);
+  const [assistClaudeEnabled, setAssistClaudeEnabled] = useState(false);
   const [privacyMode, setPrivacyMode] = useStoredState("sightbridge.privacyMode", "balanced");
   const [speakDisclosures, setSpeakDisclosures] = useStoredState("sightbridge.speakDisclosures", false);
   const [assistDisclosure, setAssistDisclosure] = useState("Assist Mode is ready.");
@@ -90,7 +90,7 @@ export default function SightBridgeApp() {
     analyzeAssistFrame();
     const interval = window.setInterval(() => analyzeAssistFrame(), 3000);
     return () => window.clearInterval(interval);
-  }, [assistRunning, cameraStream, privacyMode, speakDisclosures, developerText, config.cloudVisionAvailable]);
+  }, [assistRunning, cameraStream, privacyMode, speakDisclosures, developerText, config.cloudVisionAvailable, assistClaudeEnabled]);
 
   const samples = useMemo(() => {
     const ids = new Set([12, 6, 5, 7]);
@@ -207,12 +207,9 @@ export default function SightBridgeApp() {
       let processing = "Assist local pre-check only.";
       let resultSource = "local";
 
-      if (file && config.cloudVisionAvailable && shouldRequestClaude(localPrecheck, privacyMode)) {
-        const now = Date.now();
-        const canPrompt = now - lastClaudePromptAtRef.current > 10000;
-        if (canPrompt) lastClaudePromptAtRef.current = now;
-        if (canPrompt) claudeRequested = true;
-        if (canPrompt && window.confirm("Local web pre-check cannot read this frame. Ask Claude to inspect it?")) {
+      if (file && config.cloudVisionAvailable && shouldRequestClaude(localPrecheck, privacyMode, assistClaudeEnabled)) {
+        claudeRequested = true;
+        if (assistClaudeEnabled) {
           const imageResult = await analyzeImageFile(file, { mode: "cloud" });
           claudeCalled = imageResult.available !== false;
           if (imageResult.cloudDecision) {
@@ -460,6 +457,22 @@ export default function SightBridgeApp() {
     setAssistDisclosure("Waiting for a camera frame...");
   }
 
+  function toggleAssistClaude() {
+    if (assistClaudeEnabled) {
+      setAssistClaudeEnabled(false);
+      setAssistDisclosure("Claude assist paused. Frames stay local unless re-enabled.");
+      return;
+    }
+
+    const approved = window.confirm(
+      "Enable Claude assist for this session? While Assist Mode is running, sampled frames may be sent to Claude every few seconds for visual analysis. Frames are not stored."
+    );
+    if (approved) {
+      setAssistClaudeEnabled(true);
+      setAssistDisclosure("Claude assist enabled for this session.");
+    }
+  }
+
   return (
     <main className="shell">
       <section className="workspace" aria-labelledby="app-title">
@@ -539,10 +552,13 @@ export default function SightBridgeApp() {
             setPrivacyMode={setPrivacyMode}
             speakDisclosures={speakDisclosures}
             setSpeakDisclosures={setSpeakDisclosures}
+            claudeEnabled={assistClaudeEnabled}
+            cloudAvailable={config.cloudVisionAvailable}
             disclosure={assistDisclosure}
             frameCount={assistFrameCount}
             transparency={transparency}
             onToggle={toggleAssistMode}
+            onToggleClaude={toggleAssistClaude}
           />
         )}
 
@@ -681,10 +697,13 @@ function AssistPanel({
   setPrivacyMode,
   speakDisclosures,
   setSpeakDisclosures,
+  claudeEnabled,
+  cloudAvailable,
   disclosure,
   frameCount,
   transparency,
-  onToggle
+  onToggle,
+  onToggleClaude
 }) {
   return (
     <section className="assist-panel" aria-label="Real-time assist mode">
@@ -703,6 +722,9 @@ function AssistPanel({
         <button className="button primary" type="button" onClick={onToggle}>
           {running ? "Pause assist" : canRun ? "Start assist" : "Start camera + assist"}
         </button>
+        <button className="button secondary" type="button" disabled={!cloudAvailable} onClick={onToggleClaude}>
+          {claudeEnabled ? "Claude assist on" : "Enable Claude assist"}
+        </button>
         <label className="field compact">
           <span>Privacy mode</span>
           <select value={privacyMode} onChange={(event) => setPrivacyMode(event.target.value)}>
@@ -720,6 +742,11 @@ function AssistPanel({
           Speak disclosures
         </label>
       </div>
+      <p className="assist-note">
+        {claudeEnabled
+          ? "Claude assist is enabled for this session. Frames may be analyzed while Assist Mode is running."
+          : "Claude assist is off. The browser gate cannot read visual details, so no frames are sent until you enable it."}
+      </p>
       <TransparencyPanel transparency={transparency} frameCount={frameCount} />
     </section>
   );

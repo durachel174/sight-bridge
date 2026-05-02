@@ -80,8 +80,8 @@ export function applyPrivacyMode(precheck, privacyMode = "balanced") {
   return precheck;
 }
 
-export function shouldRequestClaude(precheck, privacyMode = "balanced") {
-  return privacyMode === "balanced" && precheck.status === "unclear";
+export function shouldRequestClaude(precheck, privacyMode = "balanced", claudeEnabled = false) {
+  return Boolean(claudeEnabled && privacyMode === "balanced" && precheck.status === "unclear");
 }
 
 export function voiceDisclosureFor({ severity = "low", category = "none" } = {}) {
