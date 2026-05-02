@@ -390,7 +390,13 @@ export default function SightBridgeApp() {
 
         <Preferences preferences={preferences} setPreferences={setPreferences} />
         <Samples samples={samples} onRun={(scenario) => analyze({ scenario })} />
-        <ResultPanel result={result} evidence={evidence} latestScan={history[0]} onAction={applyAction} />
+        <ResultPanel
+          result={result}
+          evidence={evidence}
+          latestScan={history[0]}
+          onAction={applyAction}
+          onFeedback={markFeedback}
+        />
         <HistoryPanel
           history={history}
           metrics={metrics}
@@ -469,8 +475,9 @@ function Samples({ samples, onRun }) {
   );
 }
 
-function ResultPanel({ result, evidence, latestScan, onAction }) {
+function ResultPanel({ result, evidence, latestScan, onAction, onFeedback }) {
   const showActions = result.permissionChoices?.length > 0;
+  const canGiveFeedback = latestScan && result.severity !== "ready";
   return (
     <section className="result-panel" data-severity={result.severity} aria-live="polite" aria-label="Disclosure result">
       <div className="result-topline">
@@ -486,6 +493,7 @@ function ResultPanel({ result, evidence, latestScan, onAction }) {
         <p>{evidence.why}</p>
       </div>
       <ReviewTimeline result={result} latestScan={latestScan} />
+      {canGiveFeedback ? <FeedbackPanel scan={latestScan} onFeedback={onFeedback} /> : null}
       <details className="evidence-panel">
         <summary>Detected evidence</summary>
         <dl>
@@ -519,6 +527,36 @@ function ResultPanel({ result, evidence, latestScan, onAction }) {
         </div>
       ) : null}
     </section>
+  );
+}
+
+function FeedbackPanel({ scan, onFeedback }) {
+  const options = [
+    ["correct", "Correct"],
+    ["unnecessary", "Unnecessary alert"],
+    ["missed", "Should have alerted"]
+  ];
+
+  return (
+    <div className="result-feedback" aria-label="Result feedback">
+      <div>
+        <span>Feedback</span>
+        <strong>Was this result right?</strong>
+      </div>
+      <div className="feedback-actions inline-feedback">
+        {options.map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            className={scan.feedback === value ? "selected-feedback" : ""}
+            aria-pressed={scan.feedback === value}
+            onClick={() => onFeedback(scan.id, value)}
+          >
+            {scan.feedback === value ? `Marked: ${label}` : label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

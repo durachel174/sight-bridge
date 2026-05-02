@@ -542,6 +542,42 @@ input[type="checkbox"] {
   font-size: 0.78rem;
 }
 
+.result-feedback {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fffdf9;
+  padding: 12px;
+}
+
+.result-feedback span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.result-feedback strong {
+  display: block;
+  margin-top: 3px;
+}
+
+.inline-feedback {
+  grid-column: auto;
+  justify-content: flex-end;
+}
+
+.feedback-actions button.selected-feedback {
+  border-color: var(--sage);
+  background: var(--sage-soft);
+  color: var(--sage);
+}
+
 .scan-history {
   display: grid;
   gap: 10px;
@@ -852,5 +888,14 @@ input[type="checkbox"] {
   .evaluation-toolbar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .result-feedback {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inline-feedback {
+    justify-content: flex-start;
   }
 }
