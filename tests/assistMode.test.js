@@ -41,6 +41,7 @@ test("transparency records Claude and storage state", () => {
   assert.equal(transparency.claudeRequested, true);
   assert.equal(transparency.claudeCalled, false);
   assert.equal(transparency.frameStorage, "Not stored");
+  assert.match(transparency.redactedEvidence, /Claude|required|browser/i);
 });
 
 test("speech toggle does not speak when disabled", () => {

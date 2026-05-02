@@ -208,11 +208,11 @@ export default function SightBridgeApp() {
       let resultSource = "local";
 
       if (file && config.cloudVisionAvailable && shouldRequestClaude(localPrecheck, privacyMode)) {
-        claudeRequested = true;
         const now = Date.now();
         const canPrompt = now - lastClaudePromptAtRef.current > 10000;
         if (canPrompt) lastClaudePromptAtRef.current = now;
-        if (canPrompt && window.confirm("Local scan is unclear. Ask Claude to inspect this frame?")) {
+        if (canPrompt) claudeRequested = true;
+        if (canPrompt && window.confirm("Local web pre-check cannot read this frame. Ask Claude to inspect it?")) {
           const imageResult = await analyzeImageFile(file, { mode: "cloud" });
           claudeCalled = imageResult.available !== false;
           if (imageResult.cloudDecision) {
@@ -245,22 +245,24 @@ export default function SightBridgeApp() {
         })
       );
 
-      addHistory(displayedResult, {
-        source: "assist_frame",
-        previewLabel: "Assist frame",
-        processing,
-        evidenceSummary,
-        assistMode: true,
-        privacyMode,
-        localPrecheck: localPrecheck.status,
-        claudeRequested,
-        claudeCalled,
-        spokenDisclosure: speakDisclosures,
-        resultSource,
-        sentToCloudSummary: claudeCalled
-          ? "One confirmed camera frame was sent to Claude. The frame itself was not stored."
-          : "No camera frame was sent to Claude."
-      });
+      if (shouldRecordAssistScan({ localPrecheck, claudeRequested, claudeCalled })) {
+        addHistory(displayedResult, {
+          source: "assist_frame",
+          previewLabel: "Assist frame",
+          processing,
+          evidenceSummary,
+          assistMode: true,
+          privacyMode,
+          localPrecheck: localPrecheck.status,
+          claudeRequested,
+          claudeCalled,
+          spokenDisclosure: speakDisclosures,
+          resultSource,
+          sentToCloudSummary: claudeCalled
+            ? "One confirmed camera frame was sent to Claude. The frame itself was not stored."
+            : "No camera frame was sent to Claude."
+        });
+      }
 
       maybeSpeak(displayedResult.disclosureMessage || disclosure, speakDisclosures, lastSpokenRef);
     } finally {
@@ -1186,10 +1188,24 @@ function cloudDecisionToResult(decision, fallback) {
     severity,
     category: decision.category ?? fallback.category,
     action: severity === "high" ? "interrupt_confirm" : severity === "low" ? "none" : "passive_disclosure",
-    disclosureMessage: decision.disclosure_message ?? fallback.disclosureMessage,
-    reasoning: decision.reasoning ?? fallback.reasoning,
+    disclosureMessage: nonEmpty(decision.disclosure_message) || fallback.disclosureMessage || defaultDisclosureMessage(severity),
+    reasoning: nonEmpty(decision.reasoning) || fallback.reasoning || "Cloud vision returned a disclosure result.",
     permissionChoices: severity === "low" ? [] : ["Continue sharing", "Restrict sharing", "AI-only mode"]
   };
+}
+
+function shouldRecordAssistScan({ localPrecheck, claudeRequested, claudeCalled }) {
+  if (claudeCalled) return true;
+  if (localPrecheck.status === "risky" || localPrecheck.status === "safe") return true;
+  return claudeRequested;
+}
+
+function nonEmpty(value) {
+  return typeof value === "string" && value.trim() ? value : "";
+}
+
+function defaultDisclosureMessage(severity) {
+  return severity === "low" ? "No disclosure alert needed." : "Possible private information detected.";
 }
 
 function assistPrecheckToResult(precheck) {

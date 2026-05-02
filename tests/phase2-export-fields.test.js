@@ -17,3 +17,9 @@ test("evaluation export includes phase 2 transparency fields", () => {
     assert.match(page, new RegExp(`${field}:`));
   }
 });
+
+test("assist mode suppresses unprompted unclear local rows", () => {
+  const page = readFileSync("app/page.jsx", "utf8");
+  assert.match(page, /function shouldRecordAssistScan/);
+  assert.match(page, /return claudeRequested/);
+});

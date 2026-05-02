@@ -53,8 +53,8 @@ export function localAssistPrecheck({ text = "", hasFrame = false, frameSignal =
     status: "unclear",
     severity: "uncertain",
     category: "none",
-    disclosure: "Unclear privacy risk. Ask before sending this frame.",
-    evidence: "Local pre-check cannot read the image in production, so the frame needs confirmation before cloud analysis."
+    disclosure: "Local web pre-check needs Claude for this frame.",
+    evidence: "The browser pre-check can confirm camera readiness, but it cannot read image content in production. Claude is required for visual privacy detection."
   };
 }
 
