@@ -141,12 +141,14 @@ export default function SightBridgeApp() {
         disclosureMessage: "Camera is active.",
         reasoning: "Capture a frame when you want SightBridge to run disclosure analysis."
       });
+      return stream;
     } catch (error) {
       setResult({
         ...EMPTY_RESULT,
         disclosureMessage: "Camera could not be started.",
         reasoning: cameraErrorMessage(error)
       });
+      return null;
     }
   }
 
@@ -167,6 +169,7 @@ export default function SightBridgeApp() {
     if (!cameraStream || !videoRef.current || !canvasRef.current) return null;
     const canvas = canvasRef.current;
     const video = videoRef.current;
+    if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) return null;
     canvas.width = video.videoWidth || 1280;
     canvas.height = video.videoHeight || 720;
     canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -179,6 +182,18 @@ export default function SightBridgeApp() {
     assistBusyRef.current = true;
     try {
       const file = await captureFrameFile();
+      if (!file) {
+        setAssistDisclosure("Waiting for a camera frame...");
+        setTransparency(
+          buildTransparency({
+            localPrecheck: {
+              status: "waiting",
+              evidence: "Camera is active, but the video frame is not ready yet."
+            }
+          })
+        );
+        return;
+      }
       const frameSignal = inspectCanvasSignal(canvasRef.current);
       const localPrecheck = applyPrivacyMode(
         localAssistPrecheck({ text: developerText, hasFrame: Boolean(file), frameSignal }),
@@ -419,6 +434,24 @@ export default function SightBridgeApp() {
     downloadTextFile(content, `sightbridge-evaluation-${new Date().toISOString().slice(0, 10)}.${extension}`, mime);
   }
 
+  async function toggleAssistMode() {
+    if (assistRunning) {
+      setAssistRunning(false);
+      setAssistDisclosure("Assist Mode paused.");
+      return;
+    }
+
+    setActiveTab("assist");
+    setAssistDisclosure("Starting camera...");
+    const stream = cameraStream ?? (await startCamera());
+    if (!stream && !cameraStream) {
+      setAssistDisclosure("Camera could not be started.");
+      return;
+    }
+    setAssistRunning(true);
+    setAssistDisclosure("Waiting for a camera frame...");
+  }
+
   return (
     <main className="shell">
       <section className="workspace" aria-labelledby="app-title">
@@ -501,7 +534,7 @@ export default function SightBridgeApp() {
             disclosure={assistDisclosure}
             frameCount={assistFrameCount}
             transparency={transparency}
-            onToggle={() => setAssistRunning((running) => !running)}
+            onToggle={toggleAssistMode}
           />
         )}
 
@@ -659,8 +692,8 @@ function AssistPanel({
         <strong>{disclosure}</strong>
       </div>
       <div className="assist-controls">
-        <button className="button primary" type="button" disabled={!canRun} onClick={onToggle}>
-          {running ? "Pause assist" : "Start assist"}
+        <button className="button primary" type="button" onClick={onToggle}>
+          {running ? "Pause assist" : canRun ? "Start assist" : "Start camera + assist"}
         </button>
         <label className="field compact">
           <span>Privacy mode</span>
