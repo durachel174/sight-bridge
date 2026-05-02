@@ -567,9 +567,15 @@ input[type="checkbox"] {
   margin-top: 3px;
 }
 
+.feedback-control {
+  display: grid;
+  gap: 8px;
+  grid-column: 2 / -1;
+}
+
 .inline-feedback {
   grid-column: auto;
-  justify-content: flex-end;
+  justify-items: end;
 }
 
 .feedback-actions button.selected-feedback {
@@ -750,7 +756,6 @@ input[type="checkbox"] {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  grid-column: 2 / -1;
 }
 
 .feedback-actions button {
@@ -767,6 +772,27 @@ input[type="checkbox"] {
 .feedback-actions button:hover {
   border-color: var(--sage);
   color: var(--sage);
+}
+
+.expected-category {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.expected-category span {
+  text-transform: uppercase;
+}
+
+.expected-category select {
+  width: auto;
+  min-height: 34px;
+  padding: 6px 30px 6px 10px;
+  font-size: 0.85rem;
 }
 
 .evidence-panel {
@@ -896,6 +922,16 @@ input[type="checkbox"] {
   }
 
   .inline-feedback {
+    justify-items: start;
+  }
+
+  .expected-category {
+    align-items: stretch;
+    flex-direction: column;
     justify-content: flex-start;
+  }
+
+  .expected-category select {
+    width: 100%;
   }
 }

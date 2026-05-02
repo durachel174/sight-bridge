@@ -10,6 +10,8 @@ const DEFAULT_PREFERENCES = {
   alertCategories: ["financial", "medical", "identity", "address", "screen", "personal"]
 };
 
+const EVALUATION_CATEGORIES = ["financial", "medical", "identity", "address", "screen", "personal", "public", "none"];
+
 const EMPTY_RESULT = {
   severity: "ready",
   category: "none",
@@ -85,6 +87,7 @@ export default function SightBridgeApp() {
       correct: meaningfulHistory.filter((scan) => scan.feedback === "correct").length,
       unnecessary: meaningfulHistory.filter((scan) => scan.feedback === "unnecessary").length,
       missed: meaningfulHistory.filter((scan) => scan.feedback === "missed").length,
+      wrongCategory: meaningfulHistory.filter((scan) => scan.feedback === "wrong_category").length,
       topCategory
     };
   }, [history]);
@@ -226,6 +229,7 @@ export default function SightBridgeApp() {
       reasoning: nextResult.reasoning,
       action: "pending",
       feedback: null,
+      expectedCategory: "",
       source: details.source ?? "unknown",
       label: details.previewLabel ?? previewLabel,
       processing: details.processing ?? "Unknown",
@@ -275,9 +279,18 @@ export default function SightBridgeApp() {
     cancelCurrentScan();
   }
 
-  function markFeedback(id, feedback) {
+  function markFeedback(id, feedback, expectedCategory = "") {
     setHistory((items) =>
-      items.map((item) => (item.id === id ? { ...item, feedback: item.feedback === feedback ? null : feedback } : item))
+      items.map((item) => {
+        if (item.id !== id) return item;
+        const isToggleOff = item.feedback === feedback && feedback !== "wrong_category";
+        return {
+          ...item,
+          feedback: isToggleOff ? null : feedback,
+          expectedCategory:
+            feedback === "wrong_category" ? expectedCategory || item.expectedCategory || item.category || "" : ""
+        };
+      })
     );
   }
 
@@ -533,31 +546,53 @@ function ResultPanel({ result, evidence, latestScan, onAction, onFeedback }) {
 }
 
 function FeedbackPanel({ scan, onFeedback }) {
-  const options = [
-    ["correct", "Correct"],
-    ["unnecessary", "Unnecessary alert"],
-    ["missed", "Should have alerted"]
-  ];
-
   return (
     <div className="result-feedback" aria-label="Result feedback">
       <div>
         <span>Feedback</span>
         <strong>Was this result right?</strong>
       </div>
-      <div className="feedback-actions inline-feedback">
+      <FeedbackControls scan={scan} onFeedback={onFeedback} inline />
+    </div>
+  );
+}
+
+function FeedbackControls({ scan, onFeedback, inline = false }) {
+  const options = [
+    ["correct", "Correct"],
+    ["unnecessary", "Unnecessary alert"],
+    ["missed", "Should have alerted"],
+    ["wrong_category", "Wrong category"]
+  ];
+  const selectedExpectedCategory = scan.expectedCategory || scan.category || "";
+
+  return (
+    <div className={`feedback-control ${inline ? "inline-feedback" : ""}`}>
+      <div className="feedback-actions">
         {options.map(([value, label]) => (
           <button
             key={value}
             type="button"
             className={scan.feedback === value ? "selected-feedback" : ""}
             aria-pressed={scan.feedback === value}
-            onClick={() => onFeedback(scan.id, value)}
+            onClick={() => onFeedback(scan.id, value, selectedExpectedCategory)}
           >
             {scan.feedback === value ? `Marked: ${label}` : label}
           </button>
         ))}
       </div>
+      {scan.feedback === "wrong_category" ? (
+        <label className="expected-category">
+          <span>Expected category</span>
+          <select value={selectedExpectedCategory} onChange={(event) => onFeedback(scan.id, "wrong_category", event.target.value)}>
+            {EVALUATION_CATEGORIES.map((category) => (
+              <option key={category} value={category}>
+                {labelForCategory(category)}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
     </div>
   );
 }
@@ -625,7 +660,7 @@ function HistoryPanel({ history, metrics, onFeedback, onExport, onClearCurrent, 
         <div>
           <span>Feedback</span>
           <strong>
-            {metrics.correct} correct / {metrics.unnecessary} unnecessary / {metrics.missed} missed
+            {metrics.correct} correct / {metrics.unnecessary} unnecessary / {metrics.missed} missed / {metrics.wrongCategory} wrong category
           </strong>
         </div>
         <div>
@@ -656,22 +691,19 @@ function HistoryPanel({ history, metrics, onFeedback, onExport, onClearCurrent, 
                 <span className="history-meta">
                   {item.severity} / {item.category} / {historyActionLabel(item.action)}
                 </span>
-                {item.feedback ? <span className="feedback-chip">{feedbackLabel(item.feedback)}</span> : null}
+                {item.feedback ? (
+                  <span className="feedback-chip">
+                    {feedbackLabel(item.feedback)}
+                    {item.feedback === "wrong_category" && item.expectedCategory
+                      ? `: ${labelForCategory(item.expectedCategory)}`
+                      : ""}
+                  </span>
+                ) : null}
               </div>
               <span className="history-time">
                 {new Date(item.time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
               </span>
-              <div className="feedback-actions">
-                <button type="button" onClick={() => onFeedback(item.id, "correct")}>
-                  {item.feedback === "correct" ? "Marked correct" : "Correct"}
-                </button>
-                <button type="button" onClick={() => onFeedback(item.id, "unnecessary")}>
-                  {item.feedback === "unnecessary" ? "Marked unnecessary" : "Unnecessary alert"}
-                </button>
-                <button type="button" onClick={() => onFeedback(item.id, "missed")}>
-                  {item.feedback === "missed" ? "Marked missed" : "Should have alerted"}
-                </button>
-              </div>
+              <FeedbackControls scan={item} onFeedback={onFeedback} />
             </li>
           ))
         )}
@@ -721,6 +753,7 @@ function toEvaluationRow(item) {
     reasoning: item.reasoning ?? "",
     action: item.action,
     feedback: item.feedback ?? "",
+    expectedCategory: item.expectedCategory ?? "",
     processing: item.processing ?? "",
     evidenceSummary: item.evidenceSummary ?? "",
     sensitivity: item.sensitivity ?? "",
@@ -851,7 +884,8 @@ function feedbackLabel(feedback) {
   return {
     correct: "Correct",
     unnecessary: "Unnecessary alert",
-    missed: "Should have alerted"
+    missed: "Should have alerted",
+    wrong_category: "Wrong category"
   }[feedback] ?? feedback;
 }
 
@@ -863,6 +897,7 @@ function labelForCategory(category) {
     identity: "Identity",
     address: "Address",
     screen: "Screens",
-    personal: "Personal docs"
+    personal: "Personal docs",
+    public: "Public"
   }[category];
 }
